@@ -1,0 +1,73 @@
+# Qwen3-Embedding-4B served by vLLM (OpenAI /v1/embeddings), used by the RAG /
+# "living sources" retrieval. 2560-dim vectors stored in pgvector.
+#
+#   1. Download weights once:   ./scripts/download-qwen-embedding.sh
+#   2. Start:                    docker compose -f deploy/model-servers/qwen-embedding/docker-compose.yml up -d
+#
+# Host: http://localhost:8090/v1   ·   app containers: http://qwen-emb-vllm:8090/v1
+# Model id (the `model` field on requests): qwen3-emb-4b
+#
+# GPU: pinned to device 1 by default (the smaller card), capped at 50% VRAM (~6 GB).
+# Override the weights location with QWEN_EMB_MODEL_DIR.
+services:
+  qwen3-emb-4b-vllm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: qwen3-emb-4b-vllm
+    command:
+      - /models/Qwen3-Embedding-4B
+      - --served-model-name
+      - qwen3-emb-4b
+      - --runner
+      - pooling
+      - --port
+      - "8090"
+      - --tensor-parallel-size
+      - "1"
+      - --max-model-len
+      - "4096"
+      - --max-num-seqs
+      - "2"
+      - --gpu-memory-utilization
+      - "0.50"
+      - --quantization
+      - fp8
+      - --dtype
+      - bfloat16
+      - --trust-remote-code
+      - --enforce-eager
+    ports:
+      - "8090:8090"
+    volumes:
+      - ${QWEN_EMB_MODEL_DIR:-./models/Qwen3-Embedding-4B}:/models/Qwen3-Embedding-4B:ro
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      NVIDIA_VISIBLE_DEVICES: ${QWEN_EMB_GPU:-1}
+      PYTORCH_ALLOC_CONF: expandable_segments:True
+    runtime: nvidia
+    networks:
+      default:
+      platform-net:
+        aliases:
+          - qwen-emb-vllm       # the app reaches it at http://qwen-emb-vllm:8090/v1
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      stack: 67108864
+    tmpfs:
+      - /tmp:exec
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${QWEN_EMB_GPU:-1}"]
+              capabilities: [gpu]
+
+networks:
+  platform-net:
+    name: platform-net
+    external: true

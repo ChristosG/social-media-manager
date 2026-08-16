@@ -1,0 +1,12 @@
+.git
+.github
+.gitignore
+.env
+.env.*
+*.md
+LICENSE
+docker-compose*.yml
+Makefile
+.idea/
+.vscode/
+keys/

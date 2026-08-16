@@ -1,0 +1,7 @@
+# Secrets
+.env
+
+# SSL certificates
+stacks/frontend/nginx/ssl/*.pem
+stacks/frontend/nginx/ssl/*.key
+!stacks/frontend/nginx/ssl/.gitkeep

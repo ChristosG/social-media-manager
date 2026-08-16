@@ -1,0 +1,36 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+
+# Go
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+*.pem
+*.key
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Generated protobuf (keep in repo for convenience, but ignore local build artifacts)
+# proto/gen/ is committed
+
+# Keys
+keys/

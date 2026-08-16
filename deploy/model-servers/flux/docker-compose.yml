@@ -1,0 +1,57 @@
+# FLUX.2-klein-4B (fp8) text-to-image: headless ComfyUI engine + a thin FastAPI wrapper.
+# Distilled model → ~4 steps, ~14 s @ 1024². Used by the assistant's image-generation tool.
+#
+#   1. Download the 3 model files once:  ./scripts/download-flux.sh
+#   2. Start:                            docker compose -f deploy/model-servers/flux/docker-compose.yml up -d
+#
+#   flux-api  → http://localhost:8000   (POST /generate {prompt,...} -> PNG)   [the app calls this]
+#   comfyui   → http://localhost:8188   (engine + web UI for manual tweaking)
+#
+# GPU: pinned to device 1 by default (shares the small card with the embedding server —
+# run one of those two at a time, or move one to another GPU via the *_GPU env vars).
+services:
+  comfyui:
+    build: ./comfyui
+    container_name: flux2-comfyui
+    # VRAM ladder: append --normalvram then --lowvram to this command if the GPU OOMs.
+    command: python3 main.py --listen 0.0.0.0 --port 8188
+    ports:
+      - "8188:8188"
+    volumes:
+      - ${FLUX_MODELS_DIR:-./models}:/opt/ComfyUI/models
+      - ./output:/opt/ComfyUI/output
+      - ./workflows:/workflows
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${FLUX_GPU:-1}"]
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  flux-api:
+    build: ./api
+    container_name: flux2-api
+    environment:
+      - COMFY_URL=http://comfyui:8188
+      - WORKFLOW=/workflows/flux2_klein_t2i_api.json
+    volumes:
+      - ./workflows:/workflows
+    ports:
+      - "8000:8000"
+    depends_on:
+      - comfyui
+    restart: unless-stopped
+    # Join platform-net so the agent-service can reach it at http://flux-api:8000 if you
+    # prefer that to the default host.docker.internal:8000 (see agent-service FLUX_BASE_URL).
+    networks:
+      default:
+      platform-net:
+        aliases:
+          - flux-api
+
+networks:
+  platform-net:
+    name: platform-net
+    external: true

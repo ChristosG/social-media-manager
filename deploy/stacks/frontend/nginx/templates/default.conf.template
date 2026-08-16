@@ -1,0 +1,139 @@
+limit_req_zone $binary_remote_addr zone=app_limit:10m rate=${RATE_LIMIT_RPS}r/s;
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+# HTTP server — works behind a host reverse proxy (SSL terminated upstream)
+# For standalone SSL, run: ./scripts/deploy.sh ssl
+server {
+    listen 80;
+    server_name ${DOMAIN} localhost;
+
+    # Certbot ACME challenge
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # Security & performance
+    include /etc/nginx/snippets/security-headers.conf;
+    include /etc/nginx/snippets/gzip.conf;
+
+    # Limits
+    client_max_body_size ${MAX_BODY_SIZE};
+    limit_req_status 429;
+
+    # Next.js static assets — immutable long cache, NO rate limiting
+    location /_next/static/ {
+        proxy_pass http://webapp:3000;
+        include /etc/nginx/snippets/proxy-params.conf;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    # Next.js RSC data requests — higher rate limit
+    location /_next/data/ {
+        proxy_pass http://webapp:3000;
+        include /etc/nginx/snippets/proxy-params.conf;
+    }
+
+    # Favicon
+    location = /favicon.ico {
+        proxy_pass http://webapp:3000;
+        include /etc/nginx/snippets/proxy-params.conf;
+        access_log off;
+        log_not_found off;
+    }
+
+    # Chat API — direct to gateway (with SSE streaming support)
+    location /api/v1/chat/ {
+        limit_req zone=app_limit burst=${RATE_LIMIT_BURST} nodelay;
+        # chat-service retired -> route the webapp's /api/v1/chat/* to the NPO agent-service namespace.
+        # This also covers /api/v1/chat/attachments (file upload -> /api/v1/agent/attachments).
+        rewrite ^/api/v1/chat/(.*)$ /api/v1/agent/$1 break;
+        client_max_body_size 10M;
+        proxy_pass http://gateway:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300;
+    }
+
+    # NPO agent management API (memory, ledger, profile) — direct to gateway
+    location /api/v1/agent/ {
+        limit_req zone=app_limit burst=${RATE_LIMIT_BURST} nodelay;
+        proxy_pass http://gateway:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120;
+    }
+
+    # Generated images — signed, self-authorizing URLs served DIRECTLY by agent-service
+    # (no gateway/JWT: the HMAC signature over (image_id, org) IS the authorization, so an
+    # <img src> can load them without a Bearer token). Read-only PNG, long-cacheable.
+    location /api/v1/img/ {
+        limit_req zone=app_limit burst=${RATE_LIMIT_BURST} nodelay;
+        proxy_pass http://agent-service:8085/img/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # Network ACL: prove this came through nginx (the gateway injects the same secret on its routes).
+        proxy_set_header X-Proxy-Secret "${AGENT_PROXY_SECRET}";
+        proxy_read_timeout 60;
+    }
+
+    # Meta OAuth callback — Meta redirects the browser here with ?code&state and NO Bearer token; the
+    # signed `state` IS the authorization. Served DIRECTLY by agent-service (bypassing the gateway's JWT
+    # gate). All OTHER /social/* endpoints are app-authed via /api/v1/agent/social/* (gateway).
+    location /api/v1/social/callback {
+        proxy_pass http://agent-service:8085/social/callback;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # Network ACL: prove this came through nginx (see /api/v1/img/).
+        proxy_set_header X-Proxy-Secret "${AGENT_PROXY_SECRET}";
+        proxy_read_timeout 60;
+    }
+
+    # Chat WebSocket
+    location /ws/chat {
+        proxy_pass http://gateway:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+    }
+
+    # Main app with WebSocket support
+    location / {
+        proxy_pass http://webapp:3000;
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+    }
+
+    # Error pages
+    error_page 502 503 504 /50x.html;
+    location = /50x.html {
+        root /usr/share/nginx/html;
+        internal;
+    }
+}
+
+# HTTPS — only active when SSL certs exist (standalone mode)
+include /etc/nginx/conf.d/ssl.conf*;

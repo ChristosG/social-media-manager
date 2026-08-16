@@ -1,0 +1,75 @@
+# Qwen3.5-9B served by vLLM (OpenAI-compatible), the assistant's "brain".
+#
+#   1. Download weights once:   ./scripts/download-qwen-llm.sh
+#   2. Start:                    docker compose -f deploy/model-servers/qwen-llm/docker-compose.yml up -d
+#
+# Reachable on the host at http://localhost:6888/v1 and, for the app containers,
+# at http://qwen-vllm:6888/v1 (network alias on the shared `platform-net`).
+#
+# GPU: pinned to device 0 by default. ~9-10 GB VRAM at fp8 / 32k ctx. Override the
+# weights location with QWEN_LLM_MODEL_DIR if you downloaded them elsewhere.
+services:
+  qwen35-vllm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: qwen35-vllm
+    command:
+      - /models/Qwen3.5-9B
+      - --port
+      - "6888"
+      - --tensor-parallel-size
+      - "1"
+      - --max-model-len
+      - "32768"
+      - --gpu-memory-utilization
+      - "0.85"
+      - --quantization
+      - fp8
+      - --dtype
+      - bfloat16
+      - --trust-remote-code
+      - --reasoning-parser          # exposes Qwen's <think> trace as delta.reasoning_content
+      - qwen3
+      - --enable-auto-tool-choice   # required for the agent's tool-calling loop
+      - --tool-call-parser
+      - qwen3_coder
+      - --enforce-eager
+      - --mm-processor-kwargs
+      - '{"max_pixels": 401408}'
+    ports:
+      - "6888:6888"
+    volumes:
+      - ${QWEN_LLM_MODEL_DIR:-./models/Qwen3.5-9B}:/models/Qwen3.5-9B:ro
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      NVIDIA_VISIBLE_DEVICES: ${QWEN_LLM_GPU:-0}
+      PYTORCH_ALLOC_CONF: expandable_segments:True
+    runtime: nvidia
+    networks:
+      default:
+      platform-net:
+        aliases:
+          - qwen-vllm           # the app reaches it at http://qwen-vllm:6888/v1
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      stack: 67108864
+    tmpfs:
+      - /tmp:exec
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${QWEN_LLM_GPU:-0}"]
+              capabilities: [gpu]
+
+# platform-net is created by the main deploy stack (deploy/scripts/deploy.sh up infra).
+# It is `external` here so this server can be started independently and still join it.
+networks:
+  platform-net:
+    name: platform-net
+    external: true

@@ -1,0 +1,17 @@
+# Service registry — add a line here to include a new service
+# deploy.sh reads this to compose the full stack
+
+services:
+  infra:
+    compose: stacks/infra/docker-compose.yml
+    required: true
+
+  backend:
+    compose: stacks/backend/docker-compose.yml
+    dev_compose: stacks/backend/docker-compose.dev.yml
+    required: true
+
+  frontend:
+    compose: stacks/frontend/docker-compose.yml
+    dev_compose: stacks/frontend/docker-compose.dev.yml
+    required: true

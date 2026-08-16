@@ -1,0 +1,23 @@
+.git
+.github
+.gitignore
+
+# Node
+**/node_modules
+**/.next
+**/.turbo
+
+# Environment / secrets
+**/.env
+**/.env.*
+**/keys/
+**/*.pem
+**/*.key
+
+# IDE
+.idea/
+.vscode/
+
+# Build artifacts not needed in Docker context
+**/coverage
+**/tmp

@@ -1,0 +1,51 @@
+ARG APP_DIR=demo-app
+ARG AUTH_UI_DIR=auth-ui
+
+# Stage 1: Dependencies
+FROM oven/bun:1-alpine AS deps
+ARG APP_DIR
+ARG AUTH_UI_DIR
+WORKDIR /app
+
+# Copy auth-ui package (pre-built dist)
+COPY ${AUTH_UI_DIR}/package.json /packages/auth-ui/package.json
+COPY ${AUTH_UI_DIR}/dist /packages/auth-ui/dist
+
+# Install deps, then replace bun's symlink with a real copy so webpack
+# resolves auth-ui's imports from /app/node_modules (not /packages/)
+COPY ${APP_DIR}/package.json ./
+RUN sed -i 's|"file:../auth-ui"|"file:/packages/auth-ui"|g' package.json && \
+    sed -i '/"postinstall"/d' package.json && \
+    awk 'NR>1 && /^[[:space:]]*\}/ && prev ~ /,$/ {sub(/,$/, "", prev)} {if(NR>1) print prev; prev=$0} END {print prev}' package.json > tmp.json && mv tmp.json package.json
+RUN bun install --no-save
+RUN rm -rf node_modules/@platform/auth-ui && \
+    mkdir -p node_modules/@platform/auth-ui && \
+    cp -r /packages/auth-ui/dist node_modules/@platform/auth-ui/dist && \
+    cp /packages/auth-ui/package.json node_modules/@platform/auth-ui/package.json
+
+# Stage 2: Build
+FROM node:22-alpine AS builder
+RUN npm i -g bun
+ARG APP_DIR
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY ${APP_DIR}/ .
+COPY --from=deps /app/package.json ./package.json
+# Guarantee a public/ dir exists even for apps that ship no static assets, so the runner's COPY always works.
+RUN mkdir -p ./public
+ARG APP_NAME=Social Studio
+ENV NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_APP_NAME=${APP_NAME}
+RUN bun run build
+
+# Stage 3: Production
+FROM node:22-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
+RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# Next standalone does NOT bundle public/ — copy it so static brand assets (e.g. /brand-mark.png) are served.
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+USER nextjs
+EXPOSE 3000
+CMD ["node", "server.js"]

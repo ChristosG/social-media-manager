@@ -1,0 +1,75 @@
+# ─── Dependencies ───
+node_modules/
+
+# ─── Build artifacts ───
+dist/
+.next/
+.turbo/
+*.tsbuildinfo
+
+# ─── Environment / Secrets ───
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+keys/
+
+# ─── Go ───
+vendor/
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# ─── IDE ───
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ─── OS ───
+.DS_Store
+Thumbs.db
+
+# ─── Docker ───
+docker-compose.override.yml
+
+# ─── Deploy / SSL ───
+deploy/stacks/frontend/nginx/ssl/*.pem
+deploy/stacks/frontend/nginx/ssl/*.key
+!deploy/stacks/frontend/nginx/ssl/.gitkeep
+
+# ─── Misc ───
+*.log
+tmp/
+coverage/
+
+# ─── Local tooling & private working notes (not part of the published project) ───
+.claude/
+.superpowers/
+.playwright-mcp/
+.remember/
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+docs/superpowers/
+docs/WALKTHROUGH.md
+docs/transcript-7-step-scenario.md
+# Local eval run artifacts
+agent-service/eval/results/*.json
+# Stray verification screenshots in the repo root
+/*.png
+deploy/backups/*.dump
+
+# Internal planning/audit artifacts — kept local, not shared publicly
+docs/superpowers/
+AUDIT_REPORT.md
+BACKLOG.md
+NEEDS_DECISION.md
+agent-service/eval/results/
+# Marketing copy for the CGLabs site — not part of the product
+SHOWCASE.md

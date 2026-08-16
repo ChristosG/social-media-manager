@@ -1,0 +1,153 @@
+syntax = "proto3";
+package chat.v1;
+option go_package = "github.com/microservices-agents/platform/proto/gen/go/chat/v1;chatv1";
+option java_package = "com.platform.chat.v1";
+option java_multiple_files = true;
+
+import "google/protobuf/timestamp.proto";
+
+enum MessageRole {
+  MESSAGE_ROLE_UNSPECIFIED = 0;
+  MESSAGE_ROLE_USER = 1;
+  MESSAGE_ROLE_ASSISTANT = 2;
+  MESSAGE_ROLE_SYSTEM = 3;
+}
+
+message Conversation {
+  string id = 1;
+  string user_id = 2;
+  string title = 3;
+  string model = 4;
+  string system_prompt = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+message AttachmentInfo {
+  string id = 1;
+  string filename = 2;
+  string original_filename = 3;
+  string mime_type = 4;
+  int64 file_size = 5;
+  string status = 6;
+}
+
+message Message {
+  string id = 1;
+  string conversation_id = 2;
+  MessageRole role = 3;
+  string content = 4;
+  int32 token_count = 5;
+  google.protobuf.Timestamp created_at = 6;
+  repeated AttachmentInfo attachments = 7;
+}
+
+// ─── CreateConversation ───
+
+message CreateConversationRequest {
+  string title = 1;
+  string model = 2;
+  string system_prompt = 3;
+}
+
+message CreateConversationResponse {
+  Conversation conversation = 1;
+}
+
+// ─── ListConversations ───
+
+message ListConversationsRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+}
+
+message ListConversationsResponse {
+  repeated Conversation conversations = 1;
+  int32 total = 2;
+}
+
+// ─── GetConversation ───
+
+message GetConversationRequest {
+  string id = 1;
+  bool include_messages = 2;
+}
+
+message GetConversationResponse {
+  Conversation conversation = 1;
+  repeated Message messages = 2;
+}
+
+// ─── UpdateConversation ───
+
+message UpdateConversationRequest {
+  string id = 1;
+  string title = 2;
+  string system_prompt = 3;
+  string model = 4;
+}
+
+message UpdateConversationResponse {
+  Conversation conversation = 1;
+}
+
+// ─── DeleteConversation ───
+
+message DeleteConversationRequest {
+  string id = 1;
+}
+
+message DeleteConversationResponse {}
+
+// ─── SendMessage ───
+
+message SendMessageRequest {
+  string conversation_id = 1;
+  string content = 2;
+}
+
+message SendMessageResponse {
+  Message user_message = 1;
+  Message assistant_message = 2;
+}
+
+// ─── StreamChat ───
+
+message StreamChatRequest {
+  string conversation_id = 1;
+  string content = 2;
+}
+
+message StreamChatResponse {
+  oneof event {
+    string token = 1;
+    Message complete = 2;
+    string error = 3;
+  }
+}
+
+// ─── SearchConversations ───
+
+message SearchConversationsRequest {
+  string query = 1;
+  int32 limit = 2;
+  int32 offset = 3;
+}
+
+message SearchConversationsResponse {
+  repeated Conversation conversations = 1;
+  int32 total = 2;
+}
+
+// ─── Service ───
+
+service ChatService {
+  rpc CreateConversation(CreateConversationRequest) returns (CreateConversationResponse);
+  rpc ListConversations(ListConversationsRequest) returns (ListConversationsResponse);
+  rpc GetConversation(GetConversationRequest) returns (GetConversationResponse);
+  rpc UpdateConversation(UpdateConversationRequest) returns (UpdateConversationResponse);
+  rpc DeleteConversation(DeleteConversationRequest) returns (DeleteConversationResponse);
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+  rpc StreamChat(StreamChatRequest) returns (stream StreamChatResponse);
+  rpc SearchConversations(SearchConversationsRequest) returns (SearchConversationsResponse);
+}

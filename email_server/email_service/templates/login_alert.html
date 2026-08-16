@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}New Login{% endblock %}
+
+{% block content %}
+<h2>New login detected</h2>
+<p>We noticed a new sign-in to your account.</p>
+<dl class="info-box">
+  <dt>Time</dt>
+  <dd>{{ timestamp }}</dd>
+  <dt>IP Address</dt>
+  <dd>{{ ip }}</dd>
+</dl>
+<p>If this wasn't you, please secure your account immediately by changing your password.</p>
+{% endblock %}

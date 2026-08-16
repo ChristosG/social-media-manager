@@ -1,0 +1,2 @@
+# Eval run artifacts are generated, not source.
+*.json

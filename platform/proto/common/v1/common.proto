@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package common.v1;
+
+option go_package = "github.com/microservices-agents/platform/proto/gen/go/common/v1;commonv1";
+
+import "google/protobuf/timestamp.proto";
+
+// PaginationRequest is used to request a specific page of results.
+message PaginationRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+}
+
+// PaginationResponse contains pagination metadata for a response.
+message PaginationResponse {
+  int32 total = 1;
+  int32 page = 2;
+  int32 page_size = 3;
+}
+
+// ErrorDetail describes a specific validation or field-level error.
+message ErrorDetail {
+  string field = 1;
+  string description = 2;
+}
+
+// Timestamp wraps google.protobuf.Timestamp for consistent usage.
+message Timestamp {
+  google.protobuf.Timestamp timestamp = 1;
+}

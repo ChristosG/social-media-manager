@@ -1,0 +1,72 @@
+services:
+  auth-ui:
+    image: oven/bun:1-alpine
+    container_name: auth-ui-dev
+    working_dir: /app
+    command: >
+      sh -c '
+        bun install --frozen-lockfile 2>/dev/null || bun install &&
+        bun run dev &
+        while [ ! -f dist/index.js ]; do sleep 1; done &&
+        sleep 2 &&
+        bun run build:css &&
+        node_modules/.bin/tailwindcss -i ./src/styles/globals.css -o ./dist/styles.css --watch &
+        wait
+      '
+    environment:
+      DEV_MODE: "1"
+    volumes:
+      - ../../../auth-ui:/app
+      - auth_ui_modules:/app/node_modules
+    networks:
+      - platform-net
+
+  webapp:
+    image: oven/bun:1-alpine
+    container_name: webapp-dev
+    working_dir: /app
+    command: >
+      sh -c '
+        echo "Waiting for auth-ui build..." &&
+        while [ ! -f /auth-ui/dist/index.js ] || [ ! -f /auth-ui/dist/styles.css ]; do sleep 1; done &&
+        echo "auth-ui ready" &&
+        bun install --frozen-lockfile 2>/dev/null || bun install;
+        rm -rf node_modules/@platform/auth-ui &&
+        mkdir -p node_modules/@platform/auth-ui &&
+        cp /auth-ui/package.json node_modules/@platform/auth-ui/ &&
+        cp -r /auth-ui/dist node_modules/@platform/auth-ui/ &&
+        echo "auth-ui synced to node_modules" &&
+        bun run dev &
+        HASH="";
+        while true; do
+          sleep 2;
+          NEW_HASH=$$(ls -lR /auth-ui/dist 2>/dev/null | md5sum);
+          if [ "$$NEW_HASH" != "$$HASH" ] && [ -n "$$HASH" ]; then
+            cp -r /auth-ui/dist node_modules/@platform/auth-ui/;
+            echo "auth-ui dist synced";
+          fi;
+          HASH="$$NEW_HASH";
+        done &
+        wait
+      '
+    volumes:
+      - ../../../${WEBAPP_DIR:-nextjs-starter}:/app
+      - ../../../auth-ui:/auth-ui
+      - webapp_modules:/app/node_modules
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:3000"
+    environment:
+      GATEWAY_URL: ${GATEWAY_URL:-http://gateway:8080}
+    depends_on:
+      auth-ui:
+        condition: service_started
+    networks:
+      - platform-net
+
+volumes:
+  auth_ui_modules:
+  webapp_modules:
+
+networks:
+  platform-net:
+    name: platform-net

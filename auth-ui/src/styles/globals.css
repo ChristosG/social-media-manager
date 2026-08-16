@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@source "../**/*.{ts,tsx}";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-background: var(--pau-background);
+  --color-foreground: var(--pau-foreground);
+  --color-primary: var(--pau-primary);
+  --color-primary-foreground: var(--pau-primary-foreground);
+  --color-secondary: var(--pau-secondary);
+  --color-secondary-foreground: var(--pau-secondary-foreground);
+  --color-muted: var(--pau-muted);
+  --color-muted-foreground: var(--pau-muted-foreground);
+  --color-accent: var(--pau-accent);
+  --color-accent-foreground: var(--pau-accent-foreground);
+  --color-destructive: var(--pau-destructive);
+  --color-destructive-foreground: var(--pau-destructive-foreground);
+  --color-border: var(--pau-border);
+  --color-input: var(--pau-input);
+  --color-ring: var(--pau-ring);
+  --color-card: var(--pau-card);
+  --color-card-foreground: var(--pau-card-foreground);
+  --radius-sm: calc(var(--pau-radius) - 4px);
+  --radius-md: calc(var(--pau-radius) - 2px);
+  --radius-lg: var(--pau-radius);
+  --radius-xl: calc(var(--pau-radius) + 4px);
+}
+
+:root {
+  --pau-background: oklch(1 0 0);
+  --pau-foreground: oklch(0.15 0.02 260);
+  --pau-primary: oklch(0.55 0.22 265);
+  --pau-primary-foreground: oklch(1 0 0);
+  --pau-secondary: oklch(0.96 0.01 260);
+  --pau-secondary-foreground: oklch(0.2 0.02 260);
+  --pau-muted: oklch(0.96 0.01 260);
+  --pau-muted-foreground: oklch(0.55 0.02 260);
+  --pau-accent: oklch(0.96 0.01 260);
+  --pau-accent-foreground: oklch(0.2 0.02 260);
+  --pau-destructive: oklch(0.55 0.22 25);
+  --pau-destructive-foreground: oklch(1 0 0);
+  --pau-border: oklch(0.9 0.01 260);
+  --pau-input: oklch(0.9 0.01 260);
+  --pau-ring: oklch(0.55 0.22 265);
+  --pau-card: oklch(1 0 0);
+  --pau-card-foreground: oklch(0.15 0.02 260);
+  --pau-radius: 0.625rem;
+
+  --pau-text-xs: clamp(0.75rem, 0.72rem + 0.15vw, 0.8125rem);
+  --pau-text-sm: clamp(0.875rem, 0.84rem + 0.18vw, 0.9375rem);
+  --pau-text-base: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+  --pau-text-lg: clamp(1.125rem, 1.05rem + 0.375vw, 1.375rem);
+  --pau-text-xl: clamp(1.25rem, 1.15rem + 0.5vw, 1.625rem);
+  --pau-text-2xl: clamp(1.5rem, 1.35rem + 0.75vw, 2rem);
+  --pau-text-3xl: clamp(1.875rem, 1.65rem + 1.125vw, 2.5rem);
+}
+
+.dark {
+  --pau-background: oklch(0.13 0.02 260);
+  --pau-foreground: oklch(0.95 0.01 260);
+  --pau-primary: oklch(0.65 0.22 265);
+  --pau-primary-foreground: oklch(0.1 0 0);
+  --pau-secondary: oklch(0.2 0.02 260);
+  --pau-secondary-foreground: oklch(0.95 0.01 260);
+  --pau-muted: oklch(0.2 0.02 260);
+  --pau-muted-foreground: oklch(0.6 0.02 260);
+  --pau-accent: oklch(0.2 0.02 260);
+  --pau-accent-foreground: oklch(0.95 0.01 260);
+  --pau-destructive: oklch(0.6 0.22 25);
+  --pau-destructive-foreground: oklch(0.95 0.01 260);
+  --pau-border: oklch(0.25 0.02 260);
+  --pau-input: oklch(0.25 0.02 260);
+  --pau-ring: oklch(0.65 0.22 265);
+  --pau-card: oklch(0.16 0.02 260);
+  --pau-card-foreground: oklch(0.95 0.01 260);
+}
+
+* {
+  border-color: var(--pau-border);
+}
+
+body {
+  background-color: var(--pau-background);
+  color: var(--pau-foreground);
+  font-size: var(--pau-text-base);
+}

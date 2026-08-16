@@ -1,0 +1,186 @@
+syntax = "proto3";
+
+package auth.v1;
+
+option go_package = "github.com/microservices-agents/platform/proto/gen/go/auth/v1;authv1";
+
+import "google/protobuf/timestamp.proto";
+import "auth/v1/auth_types.proto";
+
+// User represents an authenticated user in the system.
+message User {
+  string id = 1;
+  string email = 2;
+  bool email_verified = 3;
+  string display_name = 4;
+  bool mfa_enabled = 5;
+  AuthProvider provider = 6;
+  map<string, string> metadata = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+// RegisterRequest contains the information needed to register a new user.
+message RegisterRequest {
+  string email = 1;
+  string password = 2;
+  string display_name = 3;
+  map<string, string> metadata = 4;
+}
+
+// RegisterResponse is returned after a successful registration.
+message RegisterResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  User user = 3;
+}
+
+// LoginRequest contains the credentials for logging in.
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+// LoginResponse is returned after a successful login.
+message LoginResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  User user = 3;
+  bool requires_mfa = 4;
+  string mfa_token = 5;
+}
+
+// RefreshTokenRequest is used to obtain new tokens using a refresh token.
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+// RefreshTokenResponse contains the new tokens.
+message RefreshTokenResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+}
+
+// ValidateTokenRequest is used to validate an authentication token.
+message ValidateTokenRequest {
+  string token = 1;
+}
+
+// ValidateTokenResponse contains the validation result.
+message ValidateTokenResponse {
+  bool valid = 1;
+  string user_id = 2;
+  string email = 3;
+  map<string, string> claims = 4;
+}
+
+// LogoutRequest is used to invalidate a refresh token.
+message LogoutRequest {
+  string refresh_token = 1;
+}
+
+// LogoutResponse is returned after a successful logout.
+message LogoutResponse {}
+
+// GetUserRequest is used to retrieve a user by their ID.
+message GetUserRequest {
+  string user_id = 1;
+}
+
+// GetUserResponse contains the requested user.
+message GetUserResponse {
+  User user = 1;
+}
+
+// OAuthLoginRequest is used to complete an OAuth login flow.
+message OAuthLoginRequest {
+  AuthProvider provider = 1;
+  string code = 2;
+  string state = 3;
+}
+
+// OAuthLoginResponse is returned after a successful OAuth login.
+message OAuthLoginResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  User user = 3;
+  bool is_new_user = 4;
+}
+
+// OAuthURLRequest is used to generate an OAuth authorization URL.
+message OAuthURLRequest {
+  AuthProvider provider = 1;
+  string redirect_url = 2;
+}
+
+// OAuthURLResponse contains the generated OAuth authorization URL.
+message OAuthURLResponse {
+  string url = 1;
+}
+
+// EnableMFARequest is used to enable MFA for a user.
+message EnableMFARequest {
+  string user_id = 1;
+}
+
+// EnableMFAResponse contains the MFA setup information.
+message EnableMFAResponse {
+  string secret = 1;
+  string qr_code_url = 2;
+  repeated string recovery_codes = 3;
+}
+
+// VerifyMFARequest is used to verify an MFA code during login.
+message VerifyMFARequest {
+  string mfa_token = 1;
+  string code = 2;
+}
+
+// VerifyMFAResponse is returned after successful MFA verification.
+message VerifyMFAResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  User user = 3;
+}
+
+// DisableMFARequest is used to disable MFA for a user.
+message DisableMFARequest {
+  string user_id = 1;
+  string code = 2;
+}
+
+// DisableMFAResponse is returned after MFA is disabled.
+message DisableMFAResponse {}
+
+// ForgotPasswordRequest initiates a password reset flow.
+message ForgotPasswordRequest {
+  string email = 1;
+}
+
+// ForgotPasswordResponse is returned after the reset email is sent.
+message ForgotPasswordResponse {}
+
+// ResetPasswordRequest completes a password reset using a token.
+message ResetPasswordRequest {
+  string token = 1;
+  string new_password = 2;
+}
+
+// ResetPasswordResponse is returned after a successful password reset.
+message ResetPasswordResponse {}
+
+// VerifyEmailRequest is used to verify a user's email address.
+message VerifyEmailRequest {
+  string token = 1;
+}
+
+// VerifyEmailResponse is returned after successful email verification.
+message VerifyEmailResponse {}
+
+// ResendVerificationRequest is used to resend the email verification.
+message ResendVerificationRequest {
+  string email = 1;
+}
+
+// ResendVerificationResponse is returned after the verification email is resent.
+message ResendVerificationResponse {}

@@ -1,0 +1,73 @@
+services:
+  auth:
+    image: golang:1.23-alpine
+    container_name: auth-dev
+    working_dir: /app
+    command: >
+      sh -c '
+        go install github.com/air-verse/air@v1.61.7 &&
+        air -c /etc/air/air.auth.toml
+      '
+    volumes:
+      - ../../../platform:/app
+      - ./air.auth.toml:/etc/air/air.auth.toml:ro
+      - auth_go_cache:/root/go
+      - auth_build_cache:/root/.cache/go-build
+    expose:
+      - "50051"
+    environment:
+      AUTH_DB_HOST: ${AUTH_DB_HOST:-npo-postgres}
+      AUTH_DB_PORT: ${AUTH_DB_PORT:-5432}
+      AUTH_DB_USER: ${POSTGRES_USER:-platform}
+      AUTH_DB_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      AUTH_DB_NAME: ${POSTGRES_DB:-auth_db}
+      AUTH_DB_SSL_MODE: ${AUTH_DB_SSL_MODE:-disable}
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-15m}
+      JWT_REFRESH_TOKEN_TTL: ${JWT_REFRESH_TOKEN_TTL:-168h}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY}
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+    restart: unless-stopped
+    networks:
+      - platform-net
+
+  gateway:
+    image: golang:1.23-alpine
+    container_name: gateway-dev
+    working_dir: /app
+    command: >
+      sh -c '
+        go install github.com/air-verse/air@v1.61.7 &&
+        air -c /etc/air/air.gateway.toml
+      '
+    volumes:
+      - ../../../platform:/app
+      - ./air.gateway.toml:/etc/air/air.gateway.toml:ro
+      - gateway_go_cache:/root/go
+      - gateway_build_cache:/root/.cache/go-build
+    expose:
+      - "8080"
+    ports:
+      - "${GATEWAY_EXTERNAL_PORT:-8080}:8080"
+    environment:
+      GATEWAY_AUTH_SERVICE_ADDR: ${GATEWAY_AUTH_SERVICE_ADDR:-auth:50051}
+      GATEWAY_CORS_ALLOWED_ORIGINS: ${GATEWAY_CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      GATEWAY_RATE_LIMIT_RPS: ${GATEWAY_RATE_LIMIT_RPS:-100}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+    depends_on:
+      - auth
+    restart: unless-stopped
+    networks:
+      - platform-net
+
+volumes:
+  auth_go_cache:
+  auth_build_cache:
+  gateway_go_cache:
+  gateway_build_cache:
+
+networks:
+  platform-net:
+    name: platform-net

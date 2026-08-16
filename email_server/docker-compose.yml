@@ -1,0 +1,26 @@
+# Local development only. Production deployment: deploy/stacks/backend/
+services:
+  email-service:
+    build: ./email_service
+    container_name: email-service
+    environment:
+      - MAIL_DOMAIN=${MAIL_DOMAIN}
+      - MAIL_FROM_NAME=${MAIL_FROM_NAME:-Notifications}
+      - MAIL_FROM_ADDRESS=${MAIL_FROM_ADDRESS:-}
+      - SMTP_HOST=${RELAY_HOST}
+      - SMTP_PORT=${RELAY_PORT:-465}
+      - SMTP_USER=${RELAY_USER}
+      - SMTP_PASSWORD=${RELAY_PASSWORD}
+      - SMTP_USE_TLS=true
+      - API_KEY=${API_KEY}
+      - RATE_LIMIT_PER_RECIPIENT=${RATE_LIMIT_PER_RECIPIENT:-10}
+      - RATE_LIMIT_GLOBAL=${RATE_LIMIT_GLOBAL:-100}
+    networks:
+      - email-net
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+
+networks:
+  email-net:
+    driver: bridge

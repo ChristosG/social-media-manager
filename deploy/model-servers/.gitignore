@@ -1,0 +1,4 @@
+# Never commit downloaded model weights or generated images — only the infra.
+**/models/
+flux/output/*
+!flux/output/.gitkeep

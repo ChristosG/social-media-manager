@@ -1,0 +1,10 @@
+version: v2
+modules:
+  - path: .
+    name: buf.build/microservices-agents/platform
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE

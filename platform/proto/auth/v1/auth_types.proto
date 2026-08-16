@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package auth.v1;
+
+option go_package = "github.com/microservices-agents/platform/proto/gen/go/auth/v1;authv1";
+
+// AuthProvider represents the authentication provider used by a user.
+enum AuthProvider {
+  AUTH_PROVIDER_UNSPECIFIED = 0;
+  AUTH_PROVIDER_LOCAL = 1;
+  AUTH_PROVIDER_GOOGLE = 2;
+  reserved 3;
+  reserved "AUTH_PROVIDER_GITHUB";
+  AUTH_PROVIDER_FACEBOOK = 4;
+}
+
+// MFAMethod represents the multi-factor authentication method.
+enum MFAMethod {
+  MFA_METHOD_UNSPECIFIED = 0;
+  MFA_METHOD_TOTP = 1;
+}
+
+// TokenType represents the type of authentication token.
+enum TokenType {
+  TOKEN_TYPE_UNSPECIFIED = 0;
+  TOKEN_TYPE_ACCESS = 1;
+  TOKEN_TYPE_REFRESH = 2;
+  TOKEN_TYPE_MFA = 3;
+}

@@ -1,0 +1,87 @@
+# HTTPS — standalone mode (Docker nginx terminates SSL directly)
+# Activated by init-ssl.sh after obtaining certificates
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name DOMAIN_PLACEHOLDER;
+
+    # SSL
+    ssl_certificate /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/privkey.pem;
+    include /etc/nginx/snippets/ssl-params.conf;
+
+    # Security & performance
+    include /etc/nginx/snippets/security-headers.conf;
+    include /etc/nginx/snippets/gzip.conf;
+
+    # Limits
+    client_max_body_size ${MAX_BODY_SIZE};
+    limit_req_status 429;
+
+    # Next.js static assets — immutable long cache, NO rate limiting
+    location /_next/static/ {
+        proxy_pass http://webapp:3000;
+        include /etc/nginx/snippets/proxy-params.conf;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    location = /favicon.ico {
+        proxy_pass http://webapp:3000;
+        include /etc/nginx/snippets/proxy-params.conf;
+        access_log off;
+        log_not_found off;
+    }
+
+    # Chat API — direct to gateway (with SSE streaming support)
+    location /api/v1/chat/ {
+        limit_req zone=app_limit burst=${RATE_LIMIT_BURST} nodelay;
+        proxy_pass http://gateway:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300;
+    }
+
+    # File attachments — proxy to chat-service HTTP (binary upload/download)
+    location /api/v1/chat/attachments {
+        limit_req zone=app_limit burst=${RATE_LIMIT_BURST} nodelay;
+        proxy_pass http://chat-service:8081/api/v1/attachments;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        client_max_body_size 10M;
+    }
+
+    # Chat WebSocket
+    location /ws/chat {
+        proxy_pass http://gateway:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+    }
+
+    # Main app with WebSocket support
+    location / {
+        proxy_pass http://webapp:3000;
+        include /etc/nginx/snippets/proxy-params.conf;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+    }
+
+    error_page 502 503 504 /50x.html;
+    location = /50x.html {
+        root /usr/share/nginx/html;
+        internal;
+    }
+}

@@ -1,0 +1,96 @@
+services:
+  postgres:
+    build: ../../../platform/infra/postgres
+    container_name: postgres
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-platform}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-auth_db}
+      # Passed through so the npo init script can source the role passwords from env (no literal in SQL).
+      # npo_owner owns tables + runs migrations; npo_app is the DML-only runtime role.
+      NPO_OWNER_PASSWORD: ${NPO_OWNER_PASSWORD:?NPO_OWNER_PASSWORD is required}
+      NPO_DB_PASSWORD: ${NPO_DB_PASSWORD:?NPO_DB_PASSWORD is required}
+    command: >
+      postgres
+        -c wal_level=logical
+        -c max_replication_slots=8
+        -c max_wal_senders=8
+        -c max_connections=200
+        -c random_page_cost=1.1
+        -c effective_io_concurrency=200
+        -c effective_cache_size=8GB
+        -c work_mem=16MB
+        -c maintenance_work_mem=256MB
+        -c jit=off
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ../../../platform/infra/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-platform} -d ${POSTGRES_DB:-auth_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      platform-net:
+        aliases:
+          # `postgres` is NOT a safe name on a shared bridge: Docker registers each container's compose
+          # SERVICE name as a network alias, so any other stack with a service called `postgres` that
+          # joins platform-net answers to the same name. DNS then returns both A records and round-robins
+          # — half of all NEW connections reach a foreign database ("password authentication failed for
+          # user npo_app", with nothing in our postgres log). Long-lived pools mask it until they grow,
+          # which makes it look random. Point every service at this project-specific alias instead.
+          - npo-postgres
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    command: >
+      redis-server
+        --maxmemory 256mb
+        --maxmemory-policy allkeys-lru
+        --appendonly yes
+        --appendfsync everysec
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - platform-net
+
+  # Nightly logical backup of the npo database — the first (and currently only) line of defense
+  # against a bad migration / accidental DELETE. Dumps to ./backups (host) and prunes >14 days.
+  db-backup:
+    image: postgres:18
+    container_name: db-backup
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: ${AUTH_DB_HOST:-npo-postgres}   # project-specific alias — see the postgres service above
+      PGUSER: ${POSTGRES_USER:-platform}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      PGDATABASE: npo
+    volumes:
+      - ../../scripts/pg_backup.sh:/usr/local/bin/pg_backup.sh:ro
+      - ../../backups:/backups
+    entrypoint: ["/bin/sh", "-c", "while true; do sh /usr/local/bin/pg_backup.sh || echo '[pg_backup] FAILED'; sleep 86400; done"]
+    restart: unless-stopped
+    networks:
+      - platform-net
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  platform-net:
+    name: platform-net

@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package auth.v1;
+
+option go_package = "github.com/microservices-agents/platform/proto/gen/go/auth/v1;authv1";
+
+import "auth/v1/auth_messages.proto";
+
+// AuthService provides authentication and user management operations.
+service AuthService {
+  // Register creates a new user account.
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+
+  // Login authenticates a user with email and password.
+  rpc Login(LoginRequest) returns (LoginResponse);
+
+  // RefreshToken exchanges a refresh token for new access and refresh tokens.
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+
+  // ValidateToken checks whether a token is valid and returns its claims.
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+
+  // Logout invalidates a refresh token.
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+
+  // GetUser retrieves a user by their ID.
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+
+  // OAuthURL generates an OAuth authorization URL for the given provider.
+  rpc OAuthURL(OAuthURLRequest) returns (OAuthURLResponse);
+
+  // OAuthLogin completes an OAuth login flow with the authorization code.
+  rpc OAuthLogin(OAuthLoginRequest) returns (OAuthLoginResponse);
+
+  // EnableMFA enables multi-factor authentication for a user.
+  rpc EnableMFA(EnableMFARequest) returns (EnableMFAResponse);
+
+  // VerifyMFA verifies an MFA code during login.
+  rpc VerifyMFA(VerifyMFARequest) returns (VerifyMFAResponse);
+
+  // DisableMFA disables multi-factor authentication for a user.
+  rpc DisableMFA(DisableMFARequest) returns (DisableMFAResponse);
+
+  // ForgotPassword initiates a password reset flow.
+  rpc ForgotPassword(ForgotPasswordRequest) returns (ForgotPasswordResponse);
+
+  // ResetPassword completes a password reset using a reset token.
+  rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse);
+
+  // VerifyEmail verifies a user's email address using a verification token.
+  rpc VerifyEmail(VerifyEmailRequest) returns (VerifyEmailResponse);
+
+  // ResendVerification resends the email verification message.
+  rpc ResendVerification(ResendVerificationRequest) returns (ResendVerificationResponse);
+}

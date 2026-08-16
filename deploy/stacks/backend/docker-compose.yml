@@ -1,0 +1,203 @@
+services:
+  auth:
+    build:
+      context: ../../../platform
+      dockerfile: services/auth/Dockerfile
+    container_name: auth
+    expose:
+      - "50051"
+      - "51051"
+    # Loads OAuth provider creds (OAUTH_GOOGLE_*/OAUTH_FACEBOOK_*) etc. from the platform env file.
+    # The explicit `environment:` below overrides any overlapping keys (DB/JWT), so this only supplies
+    # the vars not set there (the OAuth client id/secret/redirect needed for social login).
+    env_file:
+      - ../../../platform/.env
+    environment:
+      AUTH_DB_HOST: ${AUTH_DB_HOST:-npo-postgres}
+      AUTH_DB_PORT: ${AUTH_DB_PORT:-5432}
+      AUTH_DB_USER: ${POSTGRES_USER:-platform}
+      AUTH_DB_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      AUTH_DB_NAME: ${POSTGRES_DB:-auth_db}
+      AUTH_DB_SSL_MODE: ${AUTH_DB_SSL_MODE:-disable}
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      JWT_ACCESS_TOKEN_TTL: ${JWT_ACCESS_TOKEN_TTL:-15m}
+      JWT_REFRESH_TOKEN_TTL: ${JWT_REFRESH_TOKEN_TTL:-168h}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY}
+      # Empty → the auth service runs with event publishing disabled (its designed fallback).
+      # This system uses no message broker; the former Kafka consumer (chat-service) is retired.
+      KAFKA_BROKERS: ""
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
+      EMAIL_SERVICE_URL: ${EMAIL_SERVICE_URL:-http://email-service:8025}
+      EMAIL_API_KEY: ${EMAIL_API_KEY:-}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:50051/ || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - platform-net
+
+  gateway:
+    build:
+      context: ../../../platform
+      dockerfile: services/gateway/Dockerfile
+    container_name: gateway
+    expose:
+      - "8080"
+    ports:
+      - "${GATEWAY_EXTERNAL_PORT:-8080}:8080"
+    environment:
+      GATEWAY_AUTH_SERVICE_ADDR: ${GATEWAY_AUTH_SERVICE_ADDR:-auth:50051}
+      GATEWAY_CORS_ALLOWED_ORIGINS: ${GATEWAY_CORS_ALLOWED_ORIGINS:-https://cgrigoriadis.online}
+      GATEWAY_RATE_LIMIT_RPS: ${GATEWAY_RATE_LIMIT_RPS:-100}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+      GATEWAY_CHAT_SERVICE_ADDR: ""   # chat-service retired; chat is served by agent-service
+      GATEWAY_AGENT_SERVICE_URL: ${GATEWAY_AGENT_SERVICE_URL:-http://agent-service:8085}
+      GATEWAY_AGENT_SERVICE_WS_URL: ${GATEWAY_AGENT_SERVICE_WS_URL:-agent-service:8085}
+      GATEWAY_AUTH_TENANT_URL: ${GATEWAY_AUTH_TENANT_URL:-http://auth:51051}
+      AGENT_PROXY_SECRET: ${AGENT_PROXY_SECRET:-}   # network ACL: injected as X-Proxy-Secret to agent-service
+    depends_on:
+      - auth
+      - agent-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - platform-net
+
+  # (The original Java chat-service is retired — the Python agent-service below is the chat brain.)
+
+  email-service:
+    build:
+      context: ../../../email_server/email_service
+    container_name: email-service
+    expose:
+      - "8025"
+    environment:
+      APP_NAME: ${APP_NAME:-Platform}
+      MAIL_DOMAIN: ${DOMAIN:-cgrigoriadis.online}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      API_KEY: ${EMAIL_API_KEY}
+      RATE_LIMIT_PER_RECIPIENT: ${EMAIL_RATE_LIMIT_PER_RECIPIENT:-10}
+      RATE_LIMIT_GLOBAL: ${EMAIL_RATE_LIMIT_GLOBAL:-100}
+    restart: unless-stopped
+    healthcheck:
+      # Probe with python, NOT wget: this image is python-slim (no busybox), so `wget` does not exist and
+      # the probe failed 100% of the time — the container sat permanently "unhealthy" while uvicorn was
+      # serving /health fine. (The Go services are alpine-based, where busybox does provide wget.)
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8025/health').status==200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - platform-net
+
+  # NPO Social Media Assistant — Python FastAPI + LangGraph agent (replaces the chat-service brain).
+  agent-service:
+    build:
+      context: ../../../agent-service
+    container_name: agent-service
+    expose:
+      - "8085"
+    environment: &agent_env
+      # Pin the container clock to UTC so app-side now() matches the DB clock (publish/schedule + JWT
+      # exp/nbf are now()-driven). Host NTP must also be correct; the app logs a loud skew alarm at boot.
+      TZ: UTC
+      # Runtime role (DML-only) for request handling; migration role (owner) only at startup.
+      DATABASE_URL: postgresql://npo_app:${NPO_DB_PASSWORD:?NPO_DB_PASSWORD is required}@${AUTH_DB_HOST:-npo-postgres}:${AUTH_DB_PORT:-5432}/npo
+      MIGRATION_DATABASE_URL: postgresql://npo_owner:${NPO_OWNER_PASSWORD:?NPO_OWNER_PASSWORD is required}@${AUTH_DB_HOST:-npo-postgres}:${AUTH_DB_PORT:-5432}/npo
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      # Network ACL: when set, agent-service rejects any request/WS without this X-Proxy-Secret (only the
+      # gateway + nginx inject it). The worker shares this anchor but serves no HTTP, so it's a harmless no-op there.
+      AGENT_PROXY_SECRET: ${AGENT_PROXY_SECRET:-}
+      # Concurrency (vLLM batches with ~no latency penalty): jobs drained at once + slots of one campaign
+      # drafted at once. Tune up as you scale; the GPU stays the graceful bottleneck (latency rises, never blocks).
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
+      DRAFT_CONCURRENCY: ${DRAFT_CONCURRENCY:-8}
+      LLM_BASE_URL: http://qwen-vllm:6888/v1
+      LLM_MODEL: /models/Qwen3.5-9B
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      EMBED_BASE_URL: ${EMBED_BASE_URL:-http://qwen-emb-vllm:8090/v1}
+      EMBED_MODEL: ${EMBED_MODEL:-qwen3-emb-4b}
+      FLUX_BASE_URL: ${FLUX_BASE_URL:-http://host.docker.internal:8000}
+      # HMAC secret for signed image URLs — stable across restarts (reuses the owner DB secret).
+      IMAGE_URL_SECRET: ${IMAGE_URL_SECRET:-${NPO_OWNER_PASSWORD}}
+      # Meta (Instagram/Facebook) social connectors — see docs/meta-social-setup.md.
+      META_TOKEN_KEY: ${META_TOKEN_KEY:-}
+      META_APP_ID: ${META_APP_ID:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      META_OAUTH_REDIRECT: ${META_OAUTH_REDIRECT:-}
+      META_LOGIN_CONFIG_ID: ${META_LOGIN_CONFIG_ID:-}
+      # Langfuse observability (optional). Set both keys to trace every agent turn; unset => no-op.
+      # Public API (sk_/pk_ + host) also powers the in-app Settings → Observability viewer.
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_HOST: ${LANGFUSE_HOST:-http://langfuse:3000}
+      LANGFUSE_PUBLIC_URL: ${LANGFUSE_PUBLIC_URL:-http://localhost:3001}
+    # Reach the FLUX image server running on the HOST (it's not in the compose network).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    # Generous memory cap (a CAP, not a reservation — normal use is ~150MB): on this shared, memory-tight
+    # host it stops a runaway/leak from OOMing the box, without ever throttling normal LLM/image work.
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    # Give in-flight work a moment to finish on SIGTERM before the kill (durable drain is Phase 6/7).
+    stop_grace_period: 60s
+    healthcheck:
+      # Readiness (DB-backed), not the static liveness stub — the orchestrator only treats us healthy
+      # when we can actually serve.
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8085/readyz').status==200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks:
+      - platform-net
+
+  # Dedicated background worker tier — drains the durable `jobs` queue (atomic claim + lease + reaper),
+  # no HTTP server. Same image as agent-service; horizontally scalable (claim-based exactly-once, no
+  # leader). Runs NO migrations (the api tier owns schema); starts once agent-service is healthy so the
+  # jobs table exists. Reuses agent-service's environment via the &agent_env anchor.
+  agent-worker:
+    build:
+      context: ../../../agent-service
+    container_name: agent-worker
+    command: ["python", "-m", "app.worker"]
+    environment: *agent_env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      agent-service:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    # Generous drain: let in-flight handlers finish on SIGTERM; anything killed keeps its lease and is
+    # reaped + resumed by the next worker.
+    stop_grace_period: 120s
+    networks:
+      - platform-net
+
+networks:
+  platform-net:
+    name: platform-net

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Verify your email{% endblock %}
+
+{% block content %}
+<h2>Verify your email, {{ name }}</h2>
+<p>Thanks for signing up! Please confirm your email address by clicking the button below.</p>
+
+<p style="text-align: center; margin: 24px 0;">
+  <!--[if mso]>
+  <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{ verify_url }}" style="height:48px;v-text-anchor:middle;width:220px;" arcsize="13%" strokecolor="#6d28d9" fillcolor="#6d28d9">
+    <w:anchorlock/>
+    <center style="color:#ffffff;font-family:sans-serif;font-size:16px;font-weight:bold;">Verify Email</center>
+  </v:roundrect>
+  <![endif]-->
+  <!--[if !mso]><!--><a href="{{ verify_url }}" class="btn">Verify Email</a><!--<![endif]-->
+</p>
+
+<p class="fallback-url">If the button doesn't work, copy and paste this link into your browser:<br>{{ verify_url }}</p>
+
+<p class="note">This link will expire in 24 hours.</p>
+
+<p class="note">Didn't sign up? You can safely ignore this email — no account will be created.</p>
+{% endblock %}
